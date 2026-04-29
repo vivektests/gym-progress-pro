@@ -32,7 +32,7 @@ const env = {
   appSlug: "gym-progress-app",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "",
+  logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310419663031152769/MigQqUNWjPvXsYhhBzBzJs/icon-EjDkAkPKjoGY6GYUYYTQGn.webp",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
