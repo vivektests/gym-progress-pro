@@ -59,3 +59,7 @@
 - Target audience: Fitness enthusiasts wanting data-driven progression tracking
 - App features 5 main tabs: Home (dashboard), Splits (workout templates), Logger (exercise input), Progress (charts), History (past workouts)
 - Progression algorithms: Linear (2.5-5kg increments), Double (reps then weight), RPE-based (autoregulatory), APRE (performance-based)
+
+## GitHub Publishing
+- [ ] Create or connect a GitHub repository and push the current Gym Progress Pro code
+- [ ] Verify the remote and document the push-after-update workflow
