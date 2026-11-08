@@ -1,0 +1,44 @@
+# Gym Progress Pro Web — Outcomes
+
+- [x] **Separate full-stack web product**
+  - Built and deployed a full-stack web version of Gym Progress Pro in the separate `/home/ubuntu/gympro` WebDev project.
+  - The mobile app was not modified; this project has its own web source tree and managed repository.
+  - The app shell, navigation, dashboard, split manager, workout logger, progress view, history, and settings adapt to desktop and mobile-sized layouts.
+
+- [x] **Manus OAuth signup/login and protected access**
+  - Preserved and wired the starter Manus OAuth signup/login callback, CSRF-bound state cookie, `webdev_app_session` session, Preview bearer fallback, logout, and protected tRPC procedures.
+  - The logged-out state is explicit and the login CTA starts the real Manus OAuth flow; no simulated Preview user was added.
+
+- [x] **Per-user workout data stored in the database**
+  - Added managed-MySQL tables and migration for exercises, splits, split days, split prescriptions, workouts, workout exercises, and workout sets.
+  - All application reads and writes are scoped to the authenticated user ID; standard exercises are shared read-only records and custom exercises are user-owned.
+
+- [x] **Workout logging**
+  - Implemented start-from-split and open workouts, exercise targets, set logging with weight/reps/RPE/notes fields, set completion feedback, and workout completion.
+
+- [x] **Splits**
+  - Implemented split creation, day/focus organization, split deletion, per-day exercise prescriptions, and start-this-day actions.
+
+- [x] **Custom exercises**
+  - Implemented private custom exercise creation and reuse alongside the seeded standard exercise library.
+
+- [x] **Progression recommendations**
+  - Implemented explainable recommendations from recent completed performance, with a tested rule for adding 2.5 kg after a strong 10+ rep set or holding load for another clean rep.
+
+- [x] **Progress charts**
+  - Implemented exercise selection, best-load/volume/session metrics, and an interactive Recharts load trend for completed sessions.
+
+- [x] **History**
+  - Implemented searchable completed-workout history, volume/set summaries, and read-only detailed workout views.
+
+- [x] **Validation, checkpoint, and permanent deployment**
+  - `pnpm check` passes; Vitest passes 9 tests across auth/platform/product suites; `pnpm test:e2e` passes health, route-manifest, and HTML-shell smoke checks; `pnpm build` succeeds.
+  - Added `client/public/manus-routes.json`, production container configuration, durable logo metadata, and the additive Drizzle migration.
+  - The remaining release action is to commit the validated files to canonical `main`, confirm the checkpoint SHA, and publish permanently.
+
+- [ ] **Advanced analytics dashboard**
+  - Add a protected analytics route with rolling 28-day muscle recovery heatmaps based on completed-set stress.
+  - Add per-muscle readiness scores and recovery labels derived from recent training load and time since last session.
+  - Add PR milestone tracking for each exercise with best logged set, estimated 1RM, next load marker, percent progress, and date achieved.
+  - Add deterministic tests for muscle bucketing, recovery scoring, milestone calculation, and the analytics route manifest.
+  - Re-run diagnostics, unit tests, runtime smoke tests, build, checkpoint, and permanent publish for the analytics release.
