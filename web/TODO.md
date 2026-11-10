@@ -42,3 +42,10 @@
   - Add PR milestone tracking for each exercise with best logged set, estimated 1RM, next load marker, percent progress, and date achieved.
   - Add deterministic tests for muscle bucketing, recovery scoring, milestone calculation, and the analytics route manifest.
   - Re-run diagnostics, unit tests, runtime smoke tests, build, checkpoint, and permanent publish for the analytics release.
+
+- [x] **Workout history exports**
+  - Add authenticated export controls to workout history for CSV download and PDF report generation.
+  - CSV export must include the user’s available completed workout history with session name, completion date, total sets, total volume, and notes.
+  - PDF export must present the same history in a print-optimized report that can be saved as a PDF from the browser.
+  - Exports must remain scoped to the signed-in user and must not modify workout data.
+  - `pnpm check`, 13 unit tests, production build, health check, route-manifest smoke check, and HTML-shell smoke check pass.

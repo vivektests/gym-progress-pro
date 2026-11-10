@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { recommendationFor } from "../shared/recommendations";
 import { milestoneProgress, normalizeMuscleGroup, recoveryState } from "../shared/analytics";
+import { historyToCsv } from "../shared/exports";
 
 describe("Gym Progress Pro critical flows", () => {
   it("recommends a measured load increase after a strong rep set", () => {
@@ -31,5 +32,13 @@ describe("Gym Progress Pro critical flows", () => {
 
   it("calculates the next load milestone", () => {
     expect(milestoneProgress(80)).toMatchObject({ next: 85, remaining: 5 });
+  });
+
+  it("exports history as escaped CSV with workout summaries", () => {
+    const csv = historyToCsv([{ name: "Legs, heavy", completedAt: "2026-11-10T10:00:00.000Z", totalSets: 12, totalVolume: 1234.6, notes: "Felt strong\nkeep this" }]);
+    expect(csv).toContain("Session,Completed date,Total sets,Total volume (kg),Notes");
+    expect(csv).toContain('"Legs, heavy"');
+    expect(csv).toContain('"Felt strong\nkeep this"');
+    expect(csv).toContain(",1235,");
   });
 });

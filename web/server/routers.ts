@@ -58,6 +58,7 @@ export const appRouter = router({
       return rows[0] ? getWorkout(ctx.user.id, rows[0].id) : null;
     }),
     history: protectedProcedure.input(z.object({ search: z.string().optional() }).optional()).query(({ ctx, input }) => listHistory(ctx.user.id, input?.search)),
+    export: protectedProcedure.query(({ ctx }) => listHistory(ctx.user.id, undefined, 5000)),
     get: protectedProcedure.input(idInput).query(({ ctx, input }) => getWorkout(ctx.user.id, input.id)),
     start: protectedProcedure.input(z.object({ splitDayId: z.number().int().positive().optional(), name: z.string().max(160).optional() })).mutation(({ ctx, input }) => startWorkout(ctx.user.id, input)),
     addExercise: protectedProcedure.input(z.object({ workoutId: z.number().int().positive(), exerciseId: z.number().int().positive(), targetSets: z.number().int().min(1).max(10), targetReps: z.string().min(1).max(30) })).mutation(({ ctx, input }) => addExerciseToWorkout(ctx.user.id, input)),

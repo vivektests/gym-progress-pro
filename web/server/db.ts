@@ -250,13 +250,13 @@ export async function completeWorkout(userId: number, workoutId: number, notes?:
   await db.update(workouts).set({ status: "completed", completedAt: new Date(), notes: notes ?? null }).where(and(eq(workouts.id, workoutId), eq(workouts.userId, userId)));
 }
 
-export async function listHistory(userId: number, search?: string) {
+export async function listHistory(userId: number, search?: string, limit = 50) {
   const db = await getDb();
   if (!db) return [];
   const filter = search?.trim()
     ? and(eq(workouts.userId, userId), eq(workouts.status, "completed"), like(workouts.name, `%${search.trim()}%`))
     : and(eq(workouts.userId, userId), eq(workouts.status, "completed"));
-  const rows = await db.select().from(workouts).where(filter).orderBy(desc(workouts.completedAt)).limit(50);
+  const rows = await db.select().from(workouts).where(filter).orderBy(desc(workouts.completedAt)).limit(limit);
   const result = [];
   for (const workout of rows) {
     const sets = await db.select().from(workoutSets).where(and(eq(workoutSets.workoutId, workout.id), eq(workoutSets.userId, userId)));
