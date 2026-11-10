@@ -49,3 +49,8 @@
   - PDF export must present the same history in a print-optimized report that can be saved as a PDF from the browser.
   - Exports must remain scoped to the signed-in user and must not modify workout data.
   - `pnpm check`, 13 unit tests, production build, health check, route-manifest smoke check, and HTML-shell smoke check pass.
+
+- [x] **UI color regression fix and frontend E2E coverage**
+  - Restore the non-empty application stylesheet so the brand palette, layout, and controls render visibly again.
+  - Add a Chromium-driven frontend E2E command that verifies the app shell, stylesheet attachment, dark login surface, and orange CTA computed colors.
+  - `pnpm test:e2e:frontend` passes alongside the existing runtime smoke suite.
