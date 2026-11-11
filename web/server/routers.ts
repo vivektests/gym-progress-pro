@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTrainingBlock, getAnalytics, getDb, getExerciseForUser, getProgress, getRecommendations, getSplits, getWorkout, listExercises, listHistory, listTrainingBlocks, addExerciseToSplitDay, addExerciseToWorkout, completeWorkout, createExercise, createSplit, logSet, startWorkout, deleteSplit } from "./db";
+import { advanceTrainingBlock, createTrainingBlock, duplicateTrainingBlock, getAnalytics, getDb, getExerciseForUser, getProgress, getRecommendations, getSplits, getWorkout, listExercises, listHistory, listTrainingBlocks, addExerciseToSplitDay, addExerciseToWorkout, completeWorkout, createExercise, createSplit, logSet, setTrainingBlockStatus, startWorkout, updateTrainingBlock, updateTrainingBlockWeek, deleteSplit } from "./db";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { desc, eq, and } from "drizzle-orm";
 import { workouts } from "../drizzle/schema";
@@ -52,7 +52,14 @@ export const appRouter = router({
   }),
   blocks: router({
     list: protectedProcedure.query(({ ctx }) => listTrainingBlocks(ctx.user.id)),
-    create: protectedProcedure.input(z.object({ name: z.string().min(2).max(120), goal: z.string().max(120).optional(), durationWeeks: z.number().int().min(1).max(12), startDate: z.coerce.date().optional(), notes: z.string().max(1000).optional() })).mutation(({ ctx, input }) => createTrainingBlock(ctx.user.id, input)),
+    create: protectedProcedure.input(z.object({ name: z.string().min(2).max(120), goal: z.string().max(120).optional(), durationWeeks: z.number().int().min(4).max(12), startDate: z.coerce.date().optional(), notes: z.string().max(1000).optional() })).mutation(({ ctx, input }) => createTrainingBlock(ctx.user.id, input)),
+    update: protectedProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().min(2).max(120).optional(), goal: z.string().max(120).optional(), notes: z.string().max(1000).optional() })).mutation(({ ctx, input }) => updateTrainingBlock(ctx.user.id, input)),
+    updateWeek: protectedProcedure.input(z.object({ id: z.number().int().positive(), label: z.string().max(120).optional(), intent: z.string().max(500).optional(), deload: z.boolean().optional(), volumeMultiplier: z.number().min(0.5).max(1.5).optional(), splitId: z.number().int().positive().nullable().optional() })).mutation(({ ctx, input }) => updateTrainingBlockWeek(ctx.user.id, input)),
+    activate: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => setTrainingBlockStatus(ctx.user.id, { ...input, status: "active" })),
+    archive: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => setTrainingBlockStatus(ctx.user.id, { ...input, status: "archived" })),
+    advance: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => advanceTrainingBlock(ctx.user.id, input.id)),
+    restart: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => advanceTrainingBlock(ctx.user.id, input.id, true)),
+    duplicate: protectedProcedure.input(z.object({ id: z.number().int().positive(), name: z.string().min(2).max(120) })).mutation(({ ctx, input }) => duplicateTrainingBlock(ctx.user.id, input.id, input.name)),
   }),
   workouts: router({
     active: protectedProcedure.query(async ({ ctx }) => {
@@ -64,7 +71,7 @@ export const appRouter = router({
     history: protectedProcedure.input(z.object({ search: z.string().optional() }).optional()).query(({ ctx, input }) => listHistory(ctx.user.id, input?.search)),
     export: protectedProcedure.query(({ ctx }) => listHistory(ctx.user.id, undefined, 5000)),
     get: protectedProcedure.input(idInput).query(({ ctx, input }) => getWorkout(ctx.user.id, input.id)),
-    start: protectedProcedure.input(z.object({ splitDayId: z.number().int().positive().optional(), name: z.string().max(160).optional() })).mutation(({ ctx, input }) => startWorkout(ctx.user.id, input)),
+    start: protectedProcedure.input(z.object({ splitDayId: z.number().int().positive().optional(), trainingBlockWeekId: z.number().int().positive().optional(), name: z.string().max(160).optional() })).mutation(({ ctx, input }) => startWorkout(ctx.user.id, input)),
     addExercise: protectedProcedure.input(z.object({ workoutId: z.number().int().positive(), exerciseId: z.number().int().positive(), targetSets: z.number().int().min(1).max(10), targetReps: z.string().min(1).max(30), targetRpe: z.number().min(5).max(10).optional(), targetRir: z.number().min(0).max(6).optional(), repMin: z.number().int().min(1).max(100).optional(), repMax: z.number().int().min(1).max(100).optional(), loadIncrement: z.number().min(0).max(100).optional(), progressionStrategy: z.enum(["double_progression", "rpe_autoregulation", "fixed_load"]).optional(), restSeconds: z.number().int().min(0).max(900).optional() })).mutation(({ ctx, input }) => addExerciseToWorkout(ctx.user.id, input)),
     logSet: protectedProcedure.input(z.object({ workoutId: z.number().int().positive(), workoutExerciseId: z.number().int().positive(), weight: z.number().min(0).max(1000), reps: z.number().int().min(0).max(100), rpe: z.number().min(0).max(10).optional(), rir: z.number().min(0).max(6).optional(), notes: z.string().max(500).optional() }).refine(input => !(input.rpe != null && input.rir != null), { message: "Enter either RPE or RIR for a set, not both." })).mutation(({ ctx, input }) => logSet(ctx.user.id, input)),
     complete: protectedProcedure.input(z.object({ workoutId: z.number().int().positive(), notes: z.string().max(500).optional() })).mutation(({ ctx, input }) => completeWorkout(ctx.user.id, input.workoutId, input.notes)),

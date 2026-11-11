@@ -84,3 +84,10 @@
   - Add an accessible weekly comparison table alongside the chart, with selected-muscle hard sets/intensity, visible change percentages, and text summaries.
   - Preserve selectable 7/28/90-day windows, muscle filters, dynamic heatmaps, responsive mobile layout, and existing live e1RM cards.
   - TypeScript diagnostics pass; 23 unit tests pass; production build, runtime smoke, and Chromium frontend E2E pass.
+
+- [x] **Release 5: advanced program customization and multi-week training blocks**
+  - Add an additive schema migration for the current program week and workout-to-block-week linkage, preserving historical prescription snapshots.
+  - Provide a user-scoped Programs page supporting 4–12 week block creation with name, goal, notes, ordered week definitions, assigned splits, volume multipliers, progression intent, and deload flags.
+  - Support per-week editing, current-week indication, start-current-week workout flow, advance week, restart, activate, archive, and duplicate program actions.
+  - Keep completed workout history linked to the originating block week; all new block queries and mutations remain scoped to the authenticated user.
+  - TypeScript diagnostics pass; 23 unit tests pass; additive migration applies; production build, runtime smoke, and Chromium frontend E2E pass.

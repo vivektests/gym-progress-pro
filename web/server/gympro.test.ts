@@ -20,7 +20,7 @@ describe("Gym Progress Pro critical flows", () => {
   it("declares every protected page in the route manifest", () => {
     const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "client/public/manus-routes.json"), "utf8"));
     const paths = manifest.routes.map((route: { path: string }) => route.path);
-    expect(paths).toEqual(expect.arrayContaining(["/", "/splits", "/workout/new", "/workout/:id", "/progress", "/analytics", "/history", "/history/:id", "/settings", "/404"]));
+    expect(paths).toEqual(expect.arrayContaining(["/", "/splits", "/programs", "/workout/new", "/workout/:id", "/progress", "/analytics", "/history", "/history/:id", "/settings", "/404"]));
   });
 
   it("maps exercise labels into stable muscle buckets", () => {

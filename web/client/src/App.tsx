@@ -13,6 +13,7 @@ import Progress from "./pages/Progress";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
 import Analytics from "./pages/Analytics";
+import Programs from "./pages/Programs";
 
 function PrivatePage({ children }: { children: React.ReactNode }) {
   return <ProtectedRoute><AppShell>{children}</AppShell></ProtectedRoute>;
@@ -22,6 +23,7 @@ function Router() {
   return <Switch>
     <Route path="/"><PrivatePage><Home /></PrivatePage></Route>
     <Route path="/splits"><PrivatePage><Splits /></PrivatePage></Route>
+    <Route path="/programs"><PrivatePage><Programs /></PrivatePage></Route>
     <Route path="/workout/new"><PrivatePage><WorkoutNew /></PrivatePage></Route>
     <Route path="/workout/:id"><PrivatePage><WorkoutLog /></PrivatePage></Route>
     <Route path="/progress"><PrivatePage><Progress /></PrivatePage></Route>

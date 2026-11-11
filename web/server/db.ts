@@ -206,16 +206,65 @@ export async function listTrainingBlocks(userId: number) {
   return result;
 }
 
-export async function startWorkout(userId: number, input: { splitDayId?: number; name?: string }) {
+export async function updateTrainingBlock(userId: number, input: { id: number; name?: string; goal?: string; notes?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
+  await db.update(trainingBlocks).set({ name: input.name, goal: input.goal, notes: input.notes }).where(and(eq(trainingBlocks.id, input.id), eq(trainingBlocks.userId, userId)));
+}
+
+export async function updateTrainingBlockWeek(userId: number, input: { id: number; label?: string; intent?: string; deload?: boolean; volumeMultiplier?: number; splitId?: number | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const values = { label: input.label, intent: input.intent, deload: input.deload == null ? undefined : input.deload ? 1 : 0, volumeMultiplierTenth: input.volumeMultiplier == null ? undefined : Math.round(input.volumeMultiplier * 10), splitId: input.splitId };
+  await db.update(trainingBlockWeeks).set(values).where(and(eq(trainingBlockWeeks.id, input.id), eq(trainingBlockWeeks.userId, userId)));
+}
+
+export async function setTrainingBlockStatus(userId: number, input: { id: number; status: "draft" | "active" | "completed" | "archived" }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(trainingBlocks).set({ status: input.status }).where(and(eq(trainingBlocks.id, input.id), eq(trainingBlocks.userId, userId)));
+}
+
+export async function advanceTrainingBlock(userId: number, blockId: number, restart = false) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const rows = await db.select().from(trainingBlocks).where(and(eq(trainingBlocks.id, blockId), eq(trainingBlocks.userId, userId))).limit(1);
+  const block = rows[0];
+  if (!block) throw new Error("Training block not found");
+  const nextWeek = restart ? 1 : Math.min(block.durationWeeks, block.currentWeek + 1);
+  const status = restart ? "active" : nextWeek >= block.durationWeeks ? "completed" : "active";
+  await db.update(trainingBlocks).set({ currentWeek: nextWeek, status }).where(and(eq(trainingBlocks.id, blockId), eq(trainingBlocks.userId, userId)));
+  return nextWeek;
+}
+
+export async function duplicateTrainingBlock(userId: number, blockId: number, name: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const source = await db.select().from(trainingBlocks).where(and(eq(trainingBlocks.id, blockId), eq(trainingBlocks.userId, userId))).limit(1);
+  if (!source[0]) throw new Error("Training block not found");
+  const inserted = await db.insert(trainingBlocks).values({ userId, name, goal: source[0].goal, durationWeeks: source[0].durationWeeks, currentWeek: 1, startDate: null, status: "draft", notes: source[0].notes });
+  const newId = Number(inserted[0].insertId);
+  const weeks = await db.select().from(trainingBlockWeeks).where(and(eq(trainingBlockWeeks.blockId, blockId), eq(trainingBlockWeeks.userId, userId)));
+  if (weeks.length) await db.insert(trainingBlockWeeks).values(weeks.map(week => ({ userId, blockId: newId, weekNumber: week.weekNumber, label: week.label, intent: week.intent, deload: week.deload, volumeMultiplierTenth: week.volumeMultiplierTenth, splitId: week.splitId })));
+  return newId;
+}
+
+export async function startWorkout(userId: number, input: { splitDayId?: number; trainingBlockWeekId?: number; name?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  let blockWeek;
+  if (input.trainingBlockWeekId) {
+    const rows = await db.select().from(trainingBlockWeeks).where(and(eq(trainingBlockWeeks.id, input.trainingBlockWeekId), eq(trainingBlockWeeks.userId, userId))).limit(1);
+    blockWeek = rows[0];
+    if (!blockWeek) throw new Error("Training block week not found");
+  }
   let day;
   if (input.splitDayId) {
     const rows = await db.select().from(splitDays).where(and(eq(splitDays.id, input.splitDayId), eq(splitDays.userId, userId))).limit(1);
     day = rows[0];
   }
   const name = input.name?.trim() || day?.name || "Open workout";
-  const workoutResult = await db.insert(workouts).values({ userId, splitDayId: day?.id ?? null, name, status: "in_progress" });
+  const workoutResult = await db.insert(workouts).values({ userId, splitDayId: day?.id ?? null, trainingBlockWeekId: blockWeek?.id ?? null, name, status: "in_progress" });
   const workoutId = Number(workoutResult[0].insertId);
   if (day) {
     const prescriptions = await db.select().from(splitDayExercises).where(and(eq(splitDayExercises.splitDayId, day.id), eq(splitDayExercises.userId, userId))).orderBy(splitDayExercises.orderIndex);
