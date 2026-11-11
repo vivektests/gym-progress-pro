@@ -1,3 +1,5 @@
+import { autoRegulationFor } from "./autoregulation";
+
 export type ProgressionStrategy = "double_progression" | "rpe_autoregulation" | "fixed_load";
 
 export type Prescription = {
@@ -52,6 +54,7 @@ export function progressionPlanFor(input: ProgressionInput) {
   const targetEffort = targetRpe;
   const sessionsCompleted = input.sessions.length;
   const bestRecentWeightTenth = Math.max(latestWeightTenth, ...previous.map(set => Math.round(set.weight * 10)));
+  const autoregulation = autoRegulationFor({ targetRpe, targetRir, loadIncrement: roundLoad(incrementTenth), targetSets: input.prescription.targetSets, repMin: min, repMax: max, currentLoad: roundLoad(latestWeightTenth), latest, previous: input.sessions.slice(1, 4) });
 
   if (!latest.length) {
     return {
@@ -60,9 +63,11 @@ export function progressionPlanFor(input: ProgressionInput) {
       recommendation: `Start at a conservative baseline for ${input.prescription.targetSets} sets of ${min}-${max} reps.`,
       reason: "No completed history yet; the first clean session establishes your baseline.",
       evidence: { sessionsCompleted, latestWeight: 0, latestAverageReps: 0, averageEffort: null },
+      autoregulation,
     };
   }
 
+  const hasEffortSignal = latest.some(set => set.rpe != null || set.rir != null);
   const highEffort = averageEffort != null && averageEffort > targetEffort + 0.4;
   const allSetsAtTop = latest.length >= input.prescription.targetSets && latest.every(set => set.reps >= max);
   const strategyAllowsIncrease = strategy !== "fixed_load";
@@ -72,7 +77,13 @@ export function progressionPlanFor(input: ProgressionInput) {
   let confidence: "high" | "medium" | "low" = sessionsCompleted >= 3 ? "high" : "medium";
   let reason = "Keep the current load and build another clean rep before adding weight.";
 
-  if (highEffort) {
+  if (hasEffortSignal) {
+    nextWeightTenth = Math.round(autoregulation.proposedLoad * 10);
+    nextMin = autoregulation.proposedRepMin;
+    nextMax = autoregulation.proposedRepMax;
+    reason = autoregulation.reason;
+    if (autoregulation.action === "deload_sets") confidence = "high";
+  } else if (highEffort) {
     nextWeightTenth = Math.max(0, latestWeightTenth - incrementTenth);
     nextMin = Math.max(1, min - 1);
     nextMax = Math.max(nextMin, max - 1);
@@ -92,10 +103,11 @@ export function progressionPlanFor(input: ProgressionInput) {
 
   const effortSuffix = targetRir != null ? ` at ${targetRir.toFixed(1)} RIR` : ` around RPE ${targetRpe.toFixed(1)}`;
   return {
-    exerciseName: input.exerciseName, strategy, targetSets: input.prescription.targetSets, targetRepMin: nextMin, targetRepMax: nextMax,
+    exerciseName: input.exerciseName, strategy, targetSets: hasEffortSignal ? autoregulation.proposedSets : input.prescription.targetSets, targetRepMin: nextMin, targetRepMax: nextMax,
     targetWeight: roundLoad(nextWeightTenth), targetRpe, targetRir, confidence, sessionsCompleted,
-    recommendation: `${roundLoad(nextWeightTenth)} kg × ${nextMin}-${nextMax} for ${input.prescription.targetSets} sets${effortSuffix}.`,
+    recommendation: `${roundLoad(nextWeightTenth)} kg × ${nextMin}-${nextMax} for ${hasEffortSignal ? autoregulation.proposedSets : input.prescription.targetSets} sets${effortSuffix}.`,
     reason,
     evidence: { sessionsCompleted, latestWeight: roundLoad(latestWeightTenth), bestRecentWeight: roundLoad(bestRecentWeightTenth), latestAverageReps: Math.round(latestAverageReps * 10) / 10, averageEffort: averageEffort == null ? null : Math.round(averageEffort * 10) / 10 },
+    autoregulation,
   };
 }

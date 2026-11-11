@@ -62,3 +62,11 @@
   - Protected block list/create endpoints provide the user-scoped multi-week foundation with base/build/peak week rows.
   - The deterministic overload engine evaluates recent sessions, rep-range completion, effort, load increments, and strategy to return exact target load, rep range, sets, confidence, evidence, and a readable reason; dashboard and progress cards display it.
   - TypeScript diagnostics pass; 16 unit tests pass, including load increase, fatigue reduction, and RIR-only conversion; production build and runtime smoke pass; Chromium frontend E2E passes after resilient teardown cleanup.
+
+- [x] **Release 2: RPE/RIR auto-regulation algorithms**
+  - Normalize either RPE or RIR into a shared effort signal while preserving the source metric; validate RPE 0–10, RIR 0–6, and reject conflicting inputs.
+  - Detect zero-reserve/high-effort work, under-target effort, performance decline, repeated fatigue, and top-of-range completion.
+  - Return explicit advisory actions for increase load, add reps, hold load, reduce load, or deload sets, with reason codes, observed effort, target effort, chosen/proposed load, evidence, and a manual-acceptance flag.
+  - Feed the auto-regulation result into next-session recommendations and visibly label adjustments in dashboard/progress cards; never mutate the athlete’s logged or chosen load automatically.
+  - Add inline RPE/RIR conflict feedback in the workout logger.
+  - TypeScript diagnostics pass; 20 unit tests pass; production build, runtime smoke, and Chromium frontend E2E pass.

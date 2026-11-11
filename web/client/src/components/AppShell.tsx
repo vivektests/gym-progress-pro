@@ -76,6 +76,8 @@ export function EmptyState({ title, copy, action }: { title: string; copy: strin
   return <div className="empty-state"><div className="empty-icon"><Dumbbell size={22} /></div><h3>{title}</h3><p>{copy}</p>{action}</div>;
 }
 
-export function RecommendationCard({ exerciseName, recommendation, reason, confidence }: { exerciseName: string; recommendation: string; reason?: string; confidence?: string }) {
-  return <div className="recommendation-card"><div className="spark-icon"><Sparkles size={18} /></div><div><p className="eyebrow">NEXT SESSION / {exerciseName}{confidence ? ` · ${confidence.toUpperCase()} SIGNAL` : ""}</p><strong>{recommendation}</strong>{reason && <small className="recommendation-reason">{reason}</small>}</div></div>;
+export function RecommendationCard({ exerciseName, recommendation, reason, confidence, autoregulation }: { exerciseName: string; recommendation: string; reason?: string; confidence?: string; autoregulation?: { action: string; observedRpe: number | null; observedRir: number | null; proposedLoad: number; chosenLoad: number; manualAcceptanceRequired: boolean } }) {
+  const adjusted = autoregulation && autoregulation.action !== "hold_load";
+  const effort = autoregulation?.observedRpe != null ? `RPE ${autoregulation.observedRpe.toFixed(1)}` : autoregulation?.observedRir != null ? `${autoregulation.observedRir.toFixed(1)} RIR` : null;
+  return <div className="recommendation-card"><div className="spark-icon"><Sparkles size={18} /></div><div><p className="eyebrow">NEXT SESSION / {exerciseName}{confidence ? ` · ${confidence.toUpperCase()} SIGNAL` : ""}</p><strong>{recommendation}</strong>{adjusted && <small className="recommendation-adjustment">AUTO-REG / {autoregulation.action.replaceAll("_", " ")} {effort ? `· observed ${effort}` : ""} · review before logging</small>}{reason && <small className="recommendation-reason">{reason}</small>}</div></div>;
 }

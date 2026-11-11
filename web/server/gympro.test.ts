@@ -5,6 +5,7 @@ import { recommendationFor } from "../shared/recommendations";
 import { milestoneProgress, normalizeMuscleGroup, recoveryState } from "../shared/analytics";
 import { historyToCsv } from "../shared/exports";
 import { progressionPlanFor } from "../shared/progression";
+import { autoRegulationFor, normalizeEffort, validateEffort } from "../shared/autoregulation";
 
 describe("Gym Progress Pro critical flows", () => {
   it("recommends a measured load increase after a strong rep set", () => {
@@ -61,5 +62,31 @@ describe("Gym Progress Pro critical flows", () => {
     const plan = progressionPlanFor({ exerciseName: "Deadlift", prescription: { targetSets: 2, targetReps: "3-5", targetRirTenth: 20, repMin: 3, repMax: 5 }, sessions: [[{ weight: 140, reps: 4, rir: 2 }, { weight: 140, reps: 4, rir: 2 }]] });
     expect(plan.targetRir).toBe(2);
     expect(plan.targetRpe).toBe(8);
+  });
+
+  it("normalizes RIR into an equivalent RPE without mutating the input", () => {
+    expect(normalizeEffort(undefined, 2)).toEqual({ rpe: 8, rir: 2, source: "rir" });
+    expect(validateEffort(8, 2)).toContain("either RPE or RIR");
+  });
+
+  it("reduces the proposed load for zero-RIR work while requiring manual acceptance", () => {
+    const adjustment = autoRegulationFor({ targetRpe: 8, loadIncrement: 2.5, targetSets: 3, repMin: 8, repMax: 10, currentLoad: 80, latest: [{ weight: 80, reps: 8, rir: 0 }, { weight: 80, reps: 8, rir: 0 }, { weight: 80, reps: 7, rir: 0 }] });
+    expect(adjustment.action).toBe("reduce_load");
+    expect(adjustment.proposedLoad).toBe(77.5);
+    expect(adjustment.manualAcceptanceRequired).toBe(true);
+    expect(adjustment.reasonCode).toBe("zero_reserve");
+  });
+
+  it("adds load when the athlete clears the range below target effort", () => {
+    const adjustment = autoRegulationFor({ targetRpe: 8, loadIncrement: 2.5, targetSets: 3, repMin: 8, repMax: 10, currentLoad: 80, latest: [{ weight: 80, reps: 10, rpe: 7 }, { weight: 80, reps: 10, rpe: 7 }, { weight: 80, reps: 10, rpe: 7 }] });
+    expect(adjustment.action).toBe("increase_load");
+    expect(adjustment.proposedLoad).toBe(82.5);
+  });
+
+  it("suggests a set deload after repeated high-effort performance decline", () => {
+    const adjustment = autoRegulationFor({ targetRpe: 8, loadIncrement: 2.5, targetSets: 3, repMin: 5, repMax: 8, currentLoad: 100, latest: [{ weight: 100, reps: 5, rpe: 9 }, { weight: 100, reps: 5, rpe: 9 }, { weight: 100, reps: 4, rpe: 9 }], previous: [[{ weight: 100, reps: 8, rpe: 8 }, { weight: 100, reps: 8, rpe: 8 }, { weight: 100, reps: 8, rpe: 8 }]] });
+    expect(adjustment.action).toBe("deload_sets");
+    expect(adjustment.proposedSets).toBe(2);
+    expect(adjustment.reasonCode).toBe("repeated_fatigue");
   });
 });
