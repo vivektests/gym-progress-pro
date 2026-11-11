@@ -31,3 +31,10 @@ export function milestoneProgress(bestWeight: number) {
   const percent = Math.max(8, Math.min(99, Math.round(((bestWeight - previous) / (next - previous)) * 100)));
   return { current: bestWeight, next, percent, remaining: Number((next - bestWeight).toFixed(1)) };
 }
+
+export function volumeSignal(changePct: number, currentVolume: number, priorVolume: number) {
+  if (currentVolume === 0 && priorVolume === 0) return { tone: "neutral" as const, label: "No volume signal", message: "Complete a loaded workout to establish a comparison." };
+  if (changePct >= 30) return { tone: "high" as const, label: "Volume spike", message: `Volume is up ${changePct}% versus the comparison window; monitor recovery before adding more work.` };
+  if (changePct <= -30) return { tone: "falling" as const, label: "Volume falling", message: `Volume is down ${Math.abs(changePct)}% versus the comparison window; rebuild gradually rather than chasing missed work.` };
+  return { tone: "steady" as const, label: "Volume steady", message: "Training load is within the recent comparison band." };
+}

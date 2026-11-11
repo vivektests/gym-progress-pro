@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { recommendationFor } from "../shared/recommendations";
-import { milestoneProgress, normalizeMuscleGroup, recoveryState } from "../shared/analytics";
+import { milestoneProgress, normalizeMuscleGroup, recoveryState, volumeSignal } from "../shared/analytics";
 import { historyToCsv } from "../shared/exports";
 import { progressionPlanFor } from "../shared/progression";
 import { autoRegulationFor, normalizeEffort, validateEffort } from "../shared/autoregulation";
@@ -101,5 +101,11 @@ describe("Gym Progress Pro critical flows", () => {
     expect(compoundLiftBucket("Barbell Bench Press")).toBe("Bench Press");
     expect(compoundLiftBucket("Cable Fly")).toBeNull();
     expect(percentOfBest(110, 120)).toBe(92);
+  });
+
+  it("flags volume spikes and falling load without implying medical certainty", () => {
+    expect(volumeSignal(35, 1350, 1000)).toMatchObject({ tone: "high", label: "Volume spike" });
+    expect(volumeSignal(-35, 650, 1000)).toMatchObject({ tone: "falling", label: "Volume falling" });
+    expect(volumeSignal(8, 1080, 1000).tone).toBe("steady");
   });
 });

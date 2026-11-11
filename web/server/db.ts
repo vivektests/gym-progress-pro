@@ -14,7 +14,7 @@ import {
   workouts,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { MUSCLE_GROUPS, milestoneProgress, normalizeMuscleGroup, recoveryState } from "../shared/analytics";
+import { MUSCLE_GROUPS, milestoneProgress, normalizeMuscleGroup, recoveryState, volumeSignal } from "../shared/analytics";
 import { progressionPlanFor, type HistoricalSet } from "../shared/progression";
 import { compoundLiftBucket, estimateOneRepMax, percentOfBest, weekStartKey } from "../shared/strength";
 
@@ -339,7 +339,7 @@ export async function getRecommendations(userId: number) {
 
 export async function getAnalytics(userId: number, options?: { days?: number; muscle?: string }) {
   const db = await getDb();
-  if (!db) return { heatmap: [], recovery: [], milestones: [], days: [], weekly: [], muscleSummary: [], compoundLifts: [], rangeDays: 28, selectedMuscle: "All", totalSets: 0, totalVolume: 0, volumeChangePct: 0 };
+  if (!db) return { heatmap: [], recovery: [], milestones: [], days: [], weekly: [], muscleSummary: [], compoundLifts: [], rangeDays: 28, selectedMuscle: "All", totalSets: 0, totalVolume: 0, volumeChangePct: 0, volumeSignal: volumeSignal(0, 0, 0), warnings: [] };
 
   const rangeDays = options?.days === 7 || options?.days === 90 ? options.days : 28;
   const selectedMuscle = options?.muscle && options.muscle !== "All" ? options.muscle : "All";
@@ -366,7 +366,7 @@ export async function getAnalytics(userId: number, options?: { days?: number; mu
   const dayMuscle = new Map<string, { sets: number; volume: number }>();
   const muscleSessions = new Map<string, { sets: number; lastTrained: Date | null; recentSets: number }>();
   const muscleSummary = new Map<string, { muscle: string; sets: number; volume: number; hardSets: number; intensitySum: number; intensityCount: number; topIntensity: number }>();
-  const weekly = new Map<string, { week: string; sets: number; volume: number; hardSets: number; intensitySum: number; intensityCount: number; topIntensity: number; muscle: Map<string, { sets: number; volume: number }> }>();
+  const weekly = new Map<string, { week: string; sets: number; volume: number; hardSets: number; intensitySum: number; intensityCount: number; topIntensity: number; muscle: Map<string, { sets: number; volume: number; hardSets: number; intensitySum: number; intensityCount: number; topIntensity: number }> }>();
   const exerciseStats = new Map<number, { exerciseName: string; muscle: string; bestWeight: number; bestReps: number; bestEstimatedOneRepMax: number; achievedAt: Date | null; latestEstimatedOneRepMax: number; latestAt: Date | null }>();
   const compoundStats = new Map<string, { lift: string; bestEstimatedOneRepMax: number; latestEstimatedOneRepMax: number; bestWeight: number; bestReps: number; achievedAt: Date | null; exerciseName: string }>();
   let totalSets = 0;
@@ -399,14 +399,16 @@ export async function getAnalytics(userId: number, options?: { days?: number; mu
       if (estimatedOneRepMax != null) { summary.intensitySum += estimatedOneRepMax; summary.intensityCount += 1; summary.topIntensity = Math.max(summary.topIntensity, estimatedOneRepMax); }
       muscleSummary.set(muscle, summary);
       const week = weekStartKey(sessionDate);
-      const weekData = weekly.get(week) ?? { week, sets: 0, volume: 0, hardSets: 0, intensitySum: 0, intensityCount: 0, topIntensity: 0, muscle: new Map<string, { sets: number; volume: number }>() };
+      const weekData = weekly.get(week) ?? { week, sets: 0, volume: 0, hardSets: 0, intensitySum: 0, intensityCount: 0, topIntensity: 0, muscle: new Map<string, { sets: number; volume: number; hardSets: number; intensitySum: number; intensityCount: number; topIntensity: number }>() };
       weekData.sets += 1;
       weekData.volume += volume;
       if (row.set.reps >= 5 && (row.set.rpeTenth == null || row.set.rpeTenth >= 70) && (row.set.rirTenth == null || row.set.rirTenth <= 30)) weekData.hardSets += 1;
       if (estimatedOneRepMax != null) { weekData.intensitySum += estimatedOneRepMax; weekData.intensityCount += 1; weekData.topIntensity = Math.max(weekData.topIntensity, estimatedOneRepMax); }
-      const weekMuscle = weekData.muscle.get(muscle) ?? { sets: 0, volume: 0 };
+      const weekMuscle = weekData.muscle.get(muscle) ?? { sets: 0, volume: 0, hardSets: 0, intensitySum: 0, intensityCount: 0, topIntensity: 0 };
       weekMuscle.sets += 1;
       weekMuscle.volume += volume;
+      if (row.set.reps >= 5 && (row.set.rpeTenth == null || row.set.rpeTenth >= 70) && (row.set.rirTenth == null || row.set.rirTenth <= 30)) weekMuscle.hardSets += 1;
+      if (estimatedOneRepMax != null) { weekMuscle.intensitySum += estimatedOneRepMax; weekMuscle.intensityCount += 1; weekMuscle.topIntensity = Math.max(weekMuscle.topIntensity, estimatedOneRepMax); }
       weekData.muscle.set(muscle, weekMuscle);
       weekly.set(week, weekData);
     }
@@ -449,8 +451,11 @@ export async function getAnalytics(userId: number, options?: { days?: number; mu
     .sort((a, b) => b.bestEstimatedOneRepMax - a.bestEstimatedOneRepMax)
     .slice(0, 8)
     .map(item => ({ ...item, latestVsBestPct: percentOfBest(item.latestEstimatedOneRepMax, item.bestEstimatedOneRepMax), ...milestoneProgress(item.bestWeight), achievedAt: item.achievedAt?.toISOString() ?? null, latestAt: item.latestAt?.toISOString() ?? null }));
-  const weeklyRows = [...weekly.values()].sort((a, b) => a.week.localeCompare(b.week)).map(item => ({ week: item.week, sets: item.sets, hardSets: item.hardSets, volume: Math.round(item.volume), averageIntensity: item.intensityCount ? Math.round((item.intensitySum / item.intensityCount) * 10) / 10 : 0, topIntensity: Math.round(item.topIntensity * 10) / 10, muscle: selectedMuscle === "All" ? null : item.muscle.get(selectedMuscle) ?? { sets: 0, volume: 0 } }));
+  const sortedWeeks = [...weekly.values()].sort((a, b) => a.week.localeCompare(b.week));
+  const weeklyRows = sortedWeeks.map((item, index) => { const prior = sortedWeeks[index - 1]; const changePct = prior?.volume ? Math.round(((item.volume - prior.volume) / prior.volume) * 100) : 0; const byMuscle = Object.fromEntries([...item.muscle.entries()].map(([key, value]) => [key, { sets: value.sets, hardSets: value.hardSets, volume: Math.round(value.volume), averageIntensity: value.intensityCount ? Math.round((value.intensitySum / value.intensityCount) * 10) / 10 : 0, topIntensity: Math.round(value.topIntensity * 10) / 10 }])); return { week: item.week, sets: item.sets, hardSets: item.hardSets, volume: Math.round(item.volume), averageIntensity: item.intensityCount ? Math.round((item.intensitySum / item.intensityCount) * 10) / 10 : 0, topIntensity: Math.round(item.topIntensity * 10) / 10, changePct, byMuscle, muscle: selectedMuscle === "All" ? null : byMuscle[selectedMuscle] ?? { sets: 0, hardSets: 0, volume: 0, averageIntensity: 0, topIntensity: 0 } }; });
   const summary = [...muscleSummary.values()].map(item => ({ muscle: item.muscle, sets: item.sets, hardSets: item.hardSets, volume: Math.round(item.volume), averageIntensity: item.intensityCount ? Math.round((item.intensitySum / item.intensityCount) * 10) / 10 : 0, topIntensity: Math.round(item.topIntensity * 10) / 10 })).sort((a, b) => b.volume - a.volume);
   const volumeChangePct = previousVolume > 0 ? Math.round(((totalVolume - previousVolume) / previousVolume) * 100) : 0;
-  return { heatmap, recovery, milestones, days, weekly: weeklyRows, muscleSummary: summary, compoundLifts: [...compoundStats.values()].sort((a, b) => b.bestEstimatedOneRepMax - a.bestEstimatedOneRepMax), rangeDays, selectedMuscle, totalSets, totalVolume: Math.round(totalVolume), volumeChangePct };
+  const signal = volumeSignal(volumeChangePct, totalVolume, previousVolume);
+  const warnings = signal.tone === "neutral" ? [] : [{ ...signal, scope: selectedMuscle }];
+  return { heatmap, recovery, milestones, days, weekly: weeklyRows, muscleSummary: summary, compoundLifts: [...compoundStats.values()].sort((a, b) => b.bestEstimatedOneRepMax - a.bestEstimatedOneRepMax), rangeDays, selectedMuscle, totalSets, totalVolume: Math.round(totalVolume), volumeChangePct, volumeSignal: signal, warnings };
 }

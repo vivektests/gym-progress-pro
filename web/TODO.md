@@ -77,3 +77,10 @@
   - Extend analytics with selectable 7/28/90-day windows, muscle-group filters, weekly volume/hard-set charts, volume change versus the prior window, per-muscle volume and intensity summaries, and compound-lift e1RM cards.
   - Keep the recovery heatmap dynamic across date ranges and label readiness as a training heuristic; zero-load exercises do not produce misleading loaded e1RM metrics.
   - TypeScript diagnostics pass; 22 unit tests pass; production build, runtime smoke, and Chromium frontend E2E pass.
+
+- [x] **Release 4: volume and intensity analytics dashboard**
+  - Extend weekly analytics with per-muscle hard sets, volume load, average intensity, top intensity, and week-over-week change values.
+  - Add deterministic volume signals for unusually high volume, falling volume, steady volume, and sparse/no-baseline data; display warnings as training guidance rather than medical certainty.
+  - Add an accessible weekly comparison table alongside the chart, with selected-muscle hard sets/intensity, visible change percentages, and text summaries.
+  - Preserve selectable 7/28/90-day windows, muscle filters, dynamic heatmaps, responsive mobile layout, and existing live e1RM cards.
+  - TypeScript diagnostics pass; 23 unit tests pass; production build, runtime smoke, and Chromium frontend E2E pass.
