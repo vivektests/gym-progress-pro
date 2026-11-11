@@ -70,3 +70,10 @@
   - Feed the auto-regulation result into next-session recommendations and visibly label adjustments in dashboard/progress cards; never mutate the athlete’s logged or chosen load automatically.
   - Add inline RPE/RIR conflict feedback in the workout logger.
   - TypeScript diagnostics pass; 20 unit tests pass; production build, runtime smoke, and Chromium frontend E2E pass.
+
+- [x] **Release 3: live 1RM estimations and advanced analytics**
+  - Add a shared Epley e1RM helper with safe filtering for zero-load, invalid, and out-of-range sets; expose compound-lift detection for squat, bench press, deadlift, and overhead press.
+  - Update exercise progress with daily-best e1RM points, latest e1RM, all-time best e1RM, latest-versus-best percentage, and a live e1RM trend line beside top working load.
+  - Extend analytics with selectable 7/28/90-day windows, muscle-group filters, weekly volume/hard-set charts, volume change versus the prior window, per-muscle volume and intensity summaries, and compound-lift e1RM cards.
+  - Keep the recovery heatmap dynamic across date ranges and label readiness as a training heuristic; zero-load exercises do not produce misleading loaded e1RM metrics.
+  - TypeScript diagnostics pass; 22 unit tests pass; production build, runtime smoke, and Chromium frontend E2E pass.

@@ -76,7 +76,7 @@ export const appRouter = router({
     list: protectedProcedure.query(({ ctx }) => getRecommendations(ctx.user.id)),
   }),
   analytics: router({
-    summary: protectedProcedure.query(({ ctx }) => getAnalytics(ctx.user.id)),
+    summary: protectedProcedure.input(z.object({ days: z.union([z.literal(7), z.literal(28), z.literal(90)]).optional(), muscle: z.string().max(40).optional() }).optional()).query(({ ctx, input }) => getAnalytics(ctx.user.id, input)),
   }),
 });
 

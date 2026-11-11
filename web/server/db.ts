@@ -16,6 +16,7 @@ import {
 import { ENV } from "./_core/env";
 import { MUSCLE_GROUPS, milestoneProgress, normalizeMuscleGroup, recoveryState } from "../shared/analytics";
 import { progressionPlanFor, type HistoricalSet } from "../shared/progression";
+import { compoundLiftBucket, estimateOneRepMax, percentOfBest, weekStartKey } from "../shared/strength";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -300,13 +301,15 @@ export async function getProgress(userId: number, exerciseId: number) {
     .innerJoin(workoutExercises, eq(workoutSets.workoutExerciseId, workoutExercises.id))
     .where(and(eq(workoutSets.userId, userId), eq(workouts.userId, userId), eq(workouts.status, "completed"), eq(workoutExercises.exerciseId, exerciseId), eq(workoutSets.completed, 1)))
     .orderBy(workouts.completedAt);
-  const byDate = new Map<string, { date: string; weight: number; volume: number; reps: number }>();
+  const byDate = new Map<string, { date: string; weight: number; volume: number; reps: number; estimatedOneRepMax: number }>();
   for (const row of rows) {
     const date = (row.workout.completedAt ?? row.workout.startedAt).toISOString().slice(0, 10);
-    const current = byDate.get(date) ?? { date, weight: 0, volume: 0, reps: 0 };
+    const current = byDate.get(date) ?? { date, weight: 0, volume: 0, reps: 0, estimatedOneRepMax: 0 };
     current.weight = Math.max(current.weight, row.set.weightTenth / 10);
     current.volume += (row.set.weightTenth * row.set.reps) / 10;
     current.reps += row.set.reps;
+    const estimatedOneRepMax = estimateOneRepMax(row.set.weightTenth / 10, row.set.reps);
+    if (estimatedOneRepMax != null) current.estimatedOneRepMax = Math.max(current.estimatedOneRepMax, estimatedOneRepMax);
     byDate.set(date, current);
   }
   return [...byDate.values()];
@@ -334,14 +337,18 @@ export async function getRecommendations(userId: number) {
   return [...grouped.values()].slice(0, 3).map(item => progressionPlanFor({ exerciseName: item.exerciseName, prescription: item.prescription, sessions: [...item.sessions.values()] }));
 }
 
-export async function getAnalytics(userId: number) {
+export async function getAnalytics(userId: number, options?: { days?: number; muscle?: string }) {
   const db = await getDb();
-  if (!db) return { heatmap: [], recovery: [], milestones: [], days: [] };
+  if (!db) return { heatmap: [], recovery: [], milestones: [], days: [], weekly: [], muscleSummary: [], compoundLifts: [], rangeDays: 28, selectedMuscle: "All", totalSets: 0, totalVolume: 0, volumeChangePct: 0 };
 
+  const rangeDays = options?.days === 7 || options?.days === 90 ? options.days : 28;
+  const selectedMuscle = options?.muscle && options.muscle !== "All" ? options.muscle : "All";
   const now = new Date();
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - 27);
+  start.setDate(start.getDate() - rangeDays + 1);
+  const previousStart = new Date(start);
+  previousStart.setDate(previousStart.getDate() - rangeDays);
   const rows = await db
     .select({ set: workoutSets, workout: workouts, exercise: exercises })
     .from(workoutSets)
@@ -351,38 +358,81 @@ export async function getAnalytics(userId: number) {
     .where(and(eq(workoutSets.userId, userId), eq(workouts.userId, userId), eq(workouts.status, "completed"), eq(workoutSets.completed, 1)))
     .orderBy(desc(workouts.completedAt), desc(workoutSets.createdAt));
 
-  const days = Array.from({ length: 28 }, (_, index) => {
+  const days = Array.from({ length: rangeDays }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
     return date.toISOString().slice(0, 10);
   });
   const dayMuscle = new Map<string, { sets: number; volume: number }>();
   const muscleSessions = new Map<string, { sets: number; lastTrained: Date | null; recentSets: number }>();
-  const exerciseStats = new Map<number, { exerciseName: string; muscle: string; bestWeight: number; bestReps: number; bestEstimatedOneRepMax: number; achievedAt: Date | null }>();
+  const muscleSummary = new Map<string, { muscle: string; sets: number; volume: number; hardSets: number; intensitySum: number; intensityCount: number; topIntensity: number }>();
+  const weekly = new Map<string, { week: string; sets: number; volume: number; hardSets: number; intensitySum: number; intensityCount: number; topIntensity: number; muscle: Map<string, { sets: number; volume: number }> }>();
+  const exerciseStats = new Map<number, { exerciseName: string; muscle: string; bestWeight: number; bestReps: number; bestEstimatedOneRepMax: number; achievedAt: Date | null; latestEstimatedOneRepMax: number; latestAt: Date | null }>();
+  const compoundStats = new Map<string, { lift: string; bestEstimatedOneRepMax: number; latestEstimatedOneRepMax: number; bestWeight: number; bestReps: number; achievedAt: Date | null; exerciseName: string }>();
+  let totalSets = 0;
+  let totalVolume = 0;
+  let previousVolume = 0;
   const recent72h = now.getTime() - 72 * 60 * 60 * 1000;
 
   for (const row of rows) {
     const sessionDate = row.workout.completedAt ?? row.workout.startedAt;
-    const dateKey = sessionDate.toISOString().slice(0, 10);
     const muscle = normalizeMuscleGroup(row.exercise.muscleGroup);
-    if (sessionDate >= start) {
-      const key = `${muscle}:${dateKey}`;
-      const bucket = dayMuscle.get(key) ?? { sets: 0, volume: 0 };
-      bucket.sets += 1;
-      bucket.volume += (row.set.weightTenth * row.set.reps) / 10;
-      dayMuscle.set(key, bucket);
-    }
-    const recovery = muscleSessions.get(muscle) ?? { sets: 0, lastTrained: null, recentSets: 0 };
-    recovery.sets += 1;
-    if (!recovery.lastTrained || sessionDate > recovery.lastTrained) recovery.lastTrained = sessionDate;
-    if (sessionDate.getTime() >= recent72h) recovery.recentSets += 1;
-    muscleSessions.set(muscle, recovery);
-
     const weight = row.set.weightTenth / 10;
-    const estimatedOneRepMax = weight * (1 + row.set.reps / 30);
+    const volume = (row.set.weightTenth * row.set.reps) / 10;
+    const estimatedOneRepMax = estimateOneRepMax(weight, row.set.reps);
+    const inWindow = sessionDate >= start && (selectedMuscle === "All" || muscle === selectedMuscle);
+    const inPreviousWindow = sessionDate >= previousStart && sessionDate < start && (selectedMuscle === "All" || muscle === selectedMuscle);
+    if (inPreviousWindow) previousVolume += volume;
+    if (inWindow) {
+      totalSets += 1;
+      totalVolume += volume;
+      const dateKey = sessionDate.toISOString().slice(0, 10);
+      const dayKey = `${muscle}:${dateKey}`;
+      const day = dayMuscle.get(dayKey) ?? { sets: 0, volume: 0 };
+      day.sets += 1;
+      day.volume += volume;
+      dayMuscle.set(dayKey, day);
+      const summary = muscleSummary.get(muscle) ?? { muscle, sets: 0, volume: 0, hardSets: 0, intensitySum: 0, intensityCount: 0, topIntensity: 0 };
+      summary.sets += 1;
+      summary.volume += volume;
+      if (row.set.reps >= 5 && (row.set.rpeTenth == null || row.set.rpeTenth >= 70) && (row.set.rirTenth == null || row.set.rirTenth <= 30)) summary.hardSets += 1;
+      if (estimatedOneRepMax != null) { summary.intensitySum += estimatedOneRepMax; summary.intensityCount += 1; summary.topIntensity = Math.max(summary.topIntensity, estimatedOneRepMax); }
+      muscleSummary.set(muscle, summary);
+      const week = weekStartKey(sessionDate);
+      const weekData = weekly.get(week) ?? { week, sets: 0, volume: 0, hardSets: 0, intensitySum: 0, intensityCount: 0, topIntensity: 0, muscle: new Map<string, { sets: number; volume: number }>() };
+      weekData.sets += 1;
+      weekData.volume += volume;
+      if (row.set.reps >= 5 && (row.set.rpeTenth == null || row.set.rpeTenth >= 70) && (row.set.rirTenth == null || row.set.rirTenth <= 30)) weekData.hardSets += 1;
+      if (estimatedOneRepMax != null) { weekData.intensitySum += estimatedOneRepMax; weekData.intensityCount += 1; weekData.topIntensity = Math.max(weekData.topIntensity, estimatedOneRepMax); }
+      const weekMuscle = weekData.muscle.get(muscle) ?? { sets: 0, volume: 0 };
+      weekMuscle.sets += 1;
+      weekMuscle.volume += volume;
+      weekData.muscle.set(muscle, weekMuscle);
+      weekly.set(week, weekData);
+    }
+
+    if (sessionDate >= start) {
+      const recovery = muscleSessions.get(muscle) ?? { sets: 0, lastTrained: null, recentSets: 0 };
+      recovery.sets += 1;
+      if (!recovery.lastTrained || sessionDate > recovery.lastTrained) recovery.lastTrained = sessionDate;
+      if (sessionDate.getTime() >= recent72h) recovery.recentSets += 1;
+      muscleSessions.set(muscle, recovery);
+    }
+
+    if (estimatedOneRepMax == null) continue;
     const current = exerciseStats.get(row.exercise.id);
-    if (!current || estimatedOneRepMax > current.bestEstimatedOneRepMax) {
-      exerciseStats.set(row.exercise.id, { exerciseName: row.exercise.name, muscle, bestWeight: weight, bestReps: row.set.reps, bestEstimatedOneRepMax: Math.round(estimatedOneRepMax * 10) / 10, achievedAt: sessionDate });
+    if (!current) {
+      exerciseStats.set(row.exercise.id, { exerciseName: row.exercise.name, muscle, bestWeight: weight, bestReps: row.set.reps, bestEstimatedOneRepMax: estimatedOneRepMax, achievedAt: sessionDate, latestEstimatedOneRepMax: estimatedOneRepMax, latestAt: sessionDate });
+    } else {
+      if (sessionDate > (current.latestAt ?? new Date(0))) { current.latestAt = sessionDate; current.latestEstimatedOneRepMax = estimatedOneRepMax; }
+      if (estimatedOneRepMax > current.bestEstimatedOneRepMax) { current.bestEstimatedOneRepMax = estimatedOneRepMax; current.bestWeight = weight; current.bestReps = row.set.reps; current.achievedAt = sessionDate; }
+    }
+    const lift = compoundLiftBucket(row.exercise.name);
+    if (lift) {
+      const compound = compoundStats.get(lift) ?? { lift, bestEstimatedOneRepMax: 0, latestEstimatedOneRepMax: estimatedOneRepMax, bestWeight: weight, bestReps: row.set.reps, achievedAt: sessionDate, exerciseName: row.exercise.name };
+      if (sessionDate > (compound.achievedAt ?? new Date(0))) compound.latestEstimatedOneRepMax = estimatedOneRepMax;
+      if (estimatedOneRepMax > compound.bestEstimatedOneRepMax) { compound.bestEstimatedOneRepMax = estimatedOneRepMax; compound.bestWeight = weight; compound.bestReps = row.set.reps; compound.achievedAt = sessionDate; compound.exerciseName = row.exercise.name; }
+      compoundStats.set(lift, compound);
     }
   }
 
@@ -398,7 +448,9 @@ export async function getAnalytics(userId: number) {
   const milestones = [...exerciseStats.values()]
     .sort((a, b) => b.bestEstimatedOneRepMax - a.bestEstimatedOneRepMax)
     .slice(0, 8)
-    .map(item => ({ ...item, ...milestoneProgress(item.bestWeight), achievedAt: item.achievedAt?.toISOString() ?? null }));
-
-  return { heatmap, recovery, milestones, days };
+    .map(item => ({ ...item, latestVsBestPct: percentOfBest(item.latestEstimatedOneRepMax, item.bestEstimatedOneRepMax), ...milestoneProgress(item.bestWeight), achievedAt: item.achievedAt?.toISOString() ?? null, latestAt: item.latestAt?.toISOString() ?? null }));
+  const weeklyRows = [...weekly.values()].sort((a, b) => a.week.localeCompare(b.week)).map(item => ({ week: item.week, sets: item.sets, hardSets: item.hardSets, volume: Math.round(item.volume), averageIntensity: item.intensityCount ? Math.round((item.intensitySum / item.intensityCount) * 10) / 10 : 0, topIntensity: Math.round(item.topIntensity * 10) / 10, muscle: selectedMuscle === "All" ? null : item.muscle.get(selectedMuscle) ?? { sets: 0, volume: 0 } }));
+  const summary = [...muscleSummary.values()].map(item => ({ muscle: item.muscle, sets: item.sets, hardSets: item.hardSets, volume: Math.round(item.volume), averageIntensity: item.intensityCount ? Math.round((item.intensitySum / item.intensityCount) * 10) / 10 : 0, topIntensity: Math.round(item.topIntensity * 10) / 10 })).sort((a, b) => b.volume - a.volume);
+  const volumeChangePct = previousVolume > 0 ? Math.round(((totalVolume - previousVolume) / previousVolume) * 100) : 0;
+  return { heatmap, recovery, milestones, days, weekly: weeklyRows, muscleSummary: summary, compoundLifts: [...compoundStats.values()].sort((a, b) => b.bestEstimatedOneRepMax - a.bestEstimatedOneRepMax), rangeDays, selectedMuscle, totalSets, totalVolume: Math.round(totalVolume), volumeChangePct };
 }

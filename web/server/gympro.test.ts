@@ -6,6 +6,7 @@ import { milestoneProgress, normalizeMuscleGroup, recoveryState } from "../share
 import { historyToCsv } from "../shared/exports";
 import { progressionPlanFor } from "../shared/progression";
 import { autoRegulationFor, normalizeEffort, validateEffort } from "../shared/autoregulation";
+import { compoundLiftBucket, estimateOneRepMax, percentOfBest } from "../shared/strength";
 
 describe("Gym Progress Pro critical flows", () => {
   it("recommends a measured load increase after a strong rep set", () => {
@@ -88,5 +89,17 @@ describe("Gym Progress Pro critical flows", () => {
     expect(adjustment.action).toBe("deload_sets");
     expect(adjustment.proposedSets).toBe(2);
     expect(adjustment.reasonCode).toBe("repeated_fatigue");
+  });
+
+  it("calculates live Epley e1RM and excludes zero-load or invalid sets", () => {
+    expect(estimateOneRepMax(100, 5)).toBe(116.7);
+    expect(estimateOneRepMax(0, 10)).toBeNull();
+    expect(estimateOneRepMax(100, 31)).toBeNull();
+  });
+
+  it("prioritizes major compound lifts and compares latest strength with best", () => {
+    expect(compoundLiftBucket("Barbell Bench Press")).toBe("Bench Press");
+    expect(compoundLiftBucket("Cable Fly")).toBeNull();
+    expect(percentOfBest(110, 120)).toBe(92);
   });
 });
