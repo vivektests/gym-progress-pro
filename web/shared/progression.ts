@@ -28,8 +28,8 @@ function rangeFromPrescription(prescription: Prescription) {
   const parsed = prescription.targetReps.match(/(\d+)\s*(?:-|–|to)\s*(\d+)/i);
   const fallback = Number(prescription.targetReps.match(/\d+/)?.[0] || 8);
   return {
-    min: prescription.repMin ?? (parsed ? Number(parsed[1]) : fallback),
-    max: prescription.repMax ?? (parsed ? Number(parsed[2]) : fallback),
+    min: parsed ? Number(parsed[1]) : (prescription.repMin ?? fallback),
+    max: parsed ? Number(parsed[2]) : (prescription.repMax ?? fallback),
   };
 }
 
