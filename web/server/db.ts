@@ -6,14 +6,16 @@ import {
   splitDayExercises,
   splitDays,
   splits,
+  trainingBlockWeeks,
+  trainingBlocks,
   users,
   workoutExercises,
   workoutSets,
   workouts,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { recommendationFor } from "../shared/recommendations";
 import { MUSCLE_GROUPS, milestoneProgress, normalizeMuscleGroup, recoveryState } from "../shared/analytics";
+import { progressionPlanFor, type HistoricalSet } from "../shared/progression";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -158,7 +160,7 @@ export async function createSplit(userId: number, input: { name: string; descrip
   return splitId;
 }
 
-export async function addExerciseToSplitDay(userId: number, input: { splitDayId: number; exerciseId: number; targetSets: number; targetReps: string }) {
+export async function addExerciseToSplitDay(userId: number, input: { splitDayId: number; exerciseId: number; targetSets: number; targetReps: string; targetRpe?: number; targetRir?: number; repMin?: number; repMax?: number; loadIncrement?: number; progressionStrategy?: "double_progression" | "rpe_autoregulation" | "fixed_load"; restSeconds?: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const day = await db.select().from(splitDays).where(and(eq(splitDays.id, input.splitDayId), eq(splitDays.userId, userId))).limit(1);
@@ -166,7 +168,8 @@ export async function addExerciseToSplitDay(userId: number, input: { splitDayId:
   const exercise = await getExerciseForUser(userId, input.exerciseId);
   if (!exercise) throw new Error("Exercise not found");
   const existing = await db.select({ id: splitDayExercises.id }).from(splitDayExercises).where(eq(splitDayExercises.splitDayId, input.splitDayId));
-  const result = await db.insert(splitDayExercises).values({ ...input, userId, orderIndex: existing.length });
+  const { targetRpe, targetRir, loadIncrement, ...rest } = input;
+  const result = await db.insert(splitDayExercises).values({ ...rest, userId, orderIndex: existing.length, targetRpeTenth: targetRpe == null ? null : Math.round(targetRpe * 10), targetRirTenth: targetRir == null ? null : Math.round(targetRir * 10), loadIncrementTenth: loadIncrement == null ? 25 : Math.round(loadIncrement * 10) });
   return Number(result[0].insertId);
 }
 
@@ -179,6 +182,27 @@ export async function deleteSplit(userId: number, splitId: number) {
   for (const day of days) await db.delete(splitDayExercises).where(and(eq(splitDayExercises.splitDayId, day.id), eq(splitDayExercises.userId, userId)));
   await db.delete(splitDays).where(and(eq(splitDays.splitId, splitId), eq(splitDays.userId, userId)));
   await db.delete(splits).where(and(eq(splits.id, splitId), eq(splits.userId, userId)));
+}
+
+export async function createTrainingBlock(userId: number, input: { name: string; goal?: string; durationWeeks: number; startDate?: Date; notes?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const result = await db.insert(trainingBlocks).values({ userId, name: input.name, goal: input.goal ?? "Progressive overload", durationWeeks: input.durationWeeks, startDate: input.startDate ?? null, notes: input.notes ?? null });
+  const blockId = Number(result[0].insertId);
+  await db.insert(trainingBlockWeeks).values(Array.from({ length: input.durationWeeks }, (_, index) => ({ userId, blockId, weekNumber: index + 1, label: index === input.durationWeeks - 1 ? "Peak" : index === 0 ? "Base" : "Build", intent: index === input.durationWeeks - 1 ? "Express strength" : "Build consistent volume", deload: 0, volumeMultiplierTenth: 10 })));
+  return blockId;
+}
+
+export async function listTrainingBlocks(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const blocks = await db.select().from(trainingBlocks).where(eq(trainingBlocks.userId, userId)).orderBy(desc(trainingBlocks.createdAt));
+  const result = [];
+  for (const block of blocks) {
+    const weeks = await db.select().from(trainingBlockWeeks).where(and(eq(trainingBlockWeeks.blockId, block.id), eq(trainingBlockWeeks.userId, userId))).orderBy(trainingBlockWeeks.weekNumber);
+    result.push({ ...block, weeks });
+  }
+  return result;
 }
 
 export async function startWorkout(userId: number, input: { splitDayId?: number; name?: string }) {
@@ -195,7 +219,7 @@ export async function startWorkout(userId: number, input: { splitDayId?: number;
   if (day) {
     const prescriptions = await db.select().from(splitDayExercises).where(and(eq(splitDayExercises.splitDayId, day.id), eq(splitDayExercises.userId, userId))).orderBy(splitDayExercises.orderIndex);
     if (prescriptions.length) {
-      await db.insert(workoutExercises).values(prescriptions.map((item, index) => ({ userId, workoutId, exerciseId: item.exerciseId, orderIndex: index, targetSets: item.targetSets, targetReps: item.targetReps })));
+      await db.insert(workoutExercises).values(prescriptions.map((item, index) => ({ userId, workoutId, exerciseId: item.exerciseId, orderIndex: index, targetSets: item.targetSets, targetReps: item.targetReps, targetRpeTenth: item.targetRpeTenth, targetRirTenth: item.targetRirTenth, repMin: item.repMin, repMax: item.repMax, loadIncrementTenth: item.loadIncrementTenth, progressionStrategy: item.progressionStrategy, restSeconds: item.restSeconds })));
     }
   }
   return workoutId;
@@ -221,7 +245,7 @@ export async function getWorkout(userId: number, workoutId: number) {
   return { ...workout, exercises: items };
 }
 
-export async function addExerciseToWorkout(userId: number, input: { workoutId: number; exerciseId: number; targetSets: number; targetReps: string }) {
+export async function addExerciseToWorkout(userId: number, input: { workoutId: number; exerciseId: number; targetSets: number; targetReps: string; targetRpe?: number; targetRir?: number; repMin?: number; repMax?: number; loadIncrement?: number; progressionStrategy?: "double_progression" | "rpe_autoregulation" | "fixed_load"; restSeconds?: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const workout = await db.select({ id: workouts.id }).from(workouts).where(and(eq(workouts.id, input.workoutId), eq(workouts.userId, userId), eq(workouts.status, "in_progress"))).limit(1);
@@ -229,18 +253,19 @@ export async function addExerciseToWorkout(userId: number, input: { workoutId: n
   const exercise = await getExerciseForUser(userId, input.exerciseId);
   if (!exercise) throw new Error("Exercise not found");
   const existing = await db.select({ id: workoutExercises.id }).from(workoutExercises).where(eq(workoutExercises.workoutId, input.workoutId));
-  const result = await db.insert(workoutExercises).values({ ...input, userId, orderIndex: existing.length });
+  const { targetRpe, targetRir, loadIncrement, ...rest } = input;
+  const result = await db.insert(workoutExercises).values({ ...rest, userId, orderIndex: existing.length, targetRpeTenth: targetRpe == null ? null : Math.round(targetRpe * 10), targetRirTenth: targetRir == null ? null : Math.round(targetRir * 10), loadIncrementTenth: loadIncrement == null ? 25 : Math.round(loadIncrement * 10) });
   return Number(result[0].insertId);
 }
 
-export async function logSet(userId: number, input: { workoutId: number; workoutExerciseId: number; weight: number; reps: number; rpe?: number; notes?: string }) {
+export async function logSet(userId: number, input: { workoutId: number; workoutExerciseId: number; weight: number; reps: number; rpe?: number; rir?: number; notes?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   const owned = await db.select({ id: workoutExercises.id }).from(workoutExercises).where(and(eq(workoutExercises.id, input.workoutExerciseId), eq(workoutExercises.workoutId, input.workoutId), eq(workoutExercises.userId, userId))).limit(1);
   if (!owned[0]) throw new Error("Workout exercise not found");
   const existing = await db.select({ setNumber: workoutSets.setNumber }).from(workoutSets).where(and(eq(workoutSets.workoutExerciseId, input.workoutExerciseId), eq(workoutSets.userId, userId))).orderBy(desc(workoutSets.setNumber)).limit(1);
   const setNumber = (existing[0]?.setNumber ?? 0) + 1;
-  const result = await db.insert(workoutSets).values({ userId, workoutId: input.workoutId, workoutExerciseId: input.workoutExerciseId, setNumber, weightTenth: Math.round(input.weight * 10), reps: input.reps, rpeTenth: input.rpe == null ? null : Math.round(input.rpe * 10), notes: input.notes ?? null, completed: 1 });
+  const result = await db.insert(workoutSets).values({ userId, workoutId: input.workoutId, workoutExerciseId: input.workoutExerciseId, setNumber, weightTenth: Math.round(input.weight * 10), reps: input.reps, rpeTenth: input.rpe == null ? null : Math.round(input.rpe * 10), rirTenth: input.rir == null ? null : Math.round(input.rir * 10), notes: input.notes ?? null, completed: 1 });
   return Number(result[0].insertId);
 }
 
@@ -291,20 +316,22 @@ export async function getRecommendations(userId: number) {
   const db = await getDb();
   if (!db) return [];
   const rows = await db
-    .select({ set: workoutSets, workout: workouts, exercise: exercises })
+    .select({ set: workoutSets, workout: workouts, exercise: exercises, workoutExercise: workoutExercises })
     .from(workoutSets)
     .innerJoin(workouts, eq(workoutSets.workoutId, workouts.id))
     .innerJoin(workoutExercises, eq(workoutSets.workoutExerciseId, workoutExercises.id))
     .innerJoin(exercises, eq(workoutExercises.exerciseId, exercises.id))
     .where(and(eq(workoutSets.userId, userId), eq(workouts.userId, userId), eq(workouts.status, "completed"), eq(workoutSets.completed, 1)))
     .orderBy(desc(workouts.completedAt), desc(workoutSets.createdAt));
-  const latest = new Map<number, { exerciseName: string; weight: number; reps: number; date: string }>();
+  const grouped = new Map<number, { exerciseName: string; prescription: typeof rows[number]["workoutExercise"]; sessions: Map<number, HistoricalSet[]> }>();
   for (const row of rows) {
-    if (!latest.has(row.exercise.id)) {
-      latest.set(row.exercise.id, { exerciseName: row.exercise.name, weight: row.set.weightTenth / 10, reps: row.set.reps, date: (row.workout.completedAt ?? row.workout.startedAt).toISOString().slice(0, 10) });
-    }
+    const current = grouped.get(row.exercise.id) ?? { exerciseName: row.exercise.name, prescription: row.workoutExercise, sessions: new Map<number, HistoricalSet[]>() };
+    const sets = current.sessions.get(row.workout.id) ?? [];
+    sets.push({ weight: row.set.weightTenth / 10, reps: row.set.reps, rpe: row.set.rpeTenth == null ? null : row.set.rpeTenth / 10, rir: row.set.rirTenth == null ? null : row.set.rirTenth / 10 });
+    current.sessions.set(row.workout.id, sets);
+    grouped.set(row.exercise.id, current);
   }
-  return [...latest.values()].slice(0, 3).map(item => ({ ...item, recommendation: recommendationFor(item) }));
+  return [...grouped.values()].slice(0, 3).map(item => progressionPlanFor({ exerciseName: item.exerciseName, prescription: item.prescription, sessions: [...item.sessions.values()] }));
 }
 
 export async function getAnalytics(userId: number) {

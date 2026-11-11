@@ -32,16 +32,16 @@
   - Implemented searchable completed-workout history, volume/set summaries, and read-only detailed workout views.
 
 - [x] **Validation, checkpoint, and permanent deployment**
-  - `pnpm check` passes; Vitest passes 9 tests across auth/platform/product suites; `pnpm test:e2e` passes health, route-manifest, and HTML-shell smoke checks; `pnpm build` succeeds.
+  - `pnpm check` passes; Vitest passes 16 tests across auth/platform/product suites; `pnpm test:e2e` passes health, route-manifest, and HTML-shell smoke checks; `pnpm build` succeeds.
   - Added `client/public/manus-routes.json`, production container configuration, durable logo metadata, and the additive Drizzle migration.
   - The remaining release action is to commit the validated files to canonical `main`, confirm the checkpoint SHA, and publish permanently.
 
-- [ ] **Advanced analytics dashboard**
+- [x] **Advanced analytics dashboard**
   - Add a protected analytics route with rolling 28-day muscle recovery heatmaps based on completed-set stress.
   - Add per-muscle readiness scores and recovery labels derived from recent training load and time since last session.
   - Add PR milestone tracking for each exercise with best logged set, estimated 1RM, next load marker, percent progress, and date achieved.
   - Add deterministic tests for muscle bucketing, recovery scoring, milestone calculation, and the analytics route manifest.
-  - Re-run diagnostics, unit tests, runtime smoke tests, build, checkpoint, and permanent publish for the analytics release.
+  - Diagnostics, unit tests, runtime smoke tests, build, checkpoint, and permanent publish were completed for the analytics release.
 
 - [x] **Workout history exports**
   - Add authenticated export controls to workout history for CSV download and PDF report generation.
@@ -54,3 +54,11 @@
   - Restore the non-empty application stylesheet so the brand palette, layout, and controls render visibly again.
   - Add a Chromium-driven frontend E2E command that verifies the app shell, stylesheet attachment, dark login surface, and orange CTA computed colors.
   - `pnpm test:e2e:frontend` passes alongside the existing runtime smoke suite.
+
+- [x] **Release 1: training data foundation and progressive overload engine**
+  - Additive migration `drizzle/0002_living_darkhawk.sql` adds nullable RIR set storage, effort-aware prescription snapshots, configurable load increments/rep bounds/strategies, copied rest durations, and user-owned `trainingBlocks` plus `trainingBlockWeeks` tables without invalidating existing rows.
+  - New sets can store RPE or RIR independently; protected validation rejects conflicting RPE+RIR input, and the logger displays both fields plus the historical effort signal.
+  - Split prescriptions support target RPE/RIR, rep minimum/maximum, load increment, strategy, and rest duration; starting a workout copies those values into an immutable workout-exercise snapshot.
+  - Protected block list/create endpoints provide the user-scoped multi-week foundation with base/build/peak week rows.
+  - The deterministic overload engine evaluates recent sessions, rep-range completion, effort, load increments, and strategy to return exact target load, rep range, sets, confidence, evidence, and a readable reason; dashboard and progress cards display it.
+  - TypeScript diagnostics pass; 16 unit tests pass, including load increase, fatigue reduction, and RIR-only conversion; production build and runtime smoke pass; Chromium frontend E2E passes after resilient teardown cleanup.

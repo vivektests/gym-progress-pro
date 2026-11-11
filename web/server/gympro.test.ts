@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { recommendationFor } from "../shared/recommendations";
 import { milestoneProgress, normalizeMuscleGroup, recoveryState } from "../shared/analytics";
 import { historyToCsv } from "../shared/exports";
+import { progressionPlanFor } from "../shared/progression";
 
 describe("Gym Progress Pro critical flows", () => {
   it("recommends a measured load increase after a strong rep set", () => {
@@ -40,5 +41,25 @@ describe("Gym Progress Pro critical flows", () => {
     expect(csv).toContain('"Legs, heavy"');
     expect(csv).toContain('"Felt strong\nkeep this"');
     expect(csv).toContain(",1235,");
+  });
+
+  it("raises the exact target after completing the prescribed rep range", () => {
+    const plan = progressionPlanFor({ exerciseName: "Bench Press", prescription: { targetSets: 3, targetReps: "8-10", repMin: 8, repMax: 10, loadIncrementTenth: 25 }, sessions: [[{ weight: 80, reps: 10 }, { weight: 80, reps: 10 }, { weight: 80, reps: 10 }]] });
+    expect(plan.targetWeight).toBe(82.5);
+    expect(plan.targetRepMin).toBe(8);
+    expect(plan.targetSets).toBe(3);
+    expect(plan.reason).toContain("All 3 sets reached 10 reps");
+  });
+
+  it("reduces load when recent effort is above the target", () => {
+    const plan = progressionPlanFor({ exerciseName: "Squat", prescription: { targetSets: 3, targetReps: "5-8", targetRpeTenth: 80, repMin: 5, repMax: 8, loadIncrementTenth: 25 }, sessions: [[{ weight: 100, reps: 6, rpe: 9 }, { weight: 100, reps: 6, rpe: 9 }, { weight: 100, reps: 5, rpe: 9 }]] });
+    expect(plan.targetWeight).toBe(97.5);
+    expect(plan.reason).toContain("above the 8.0 target");
+  });
+
+  it("converts an RIR-only target into the equivalent effort threshold", () => {
+    const plan = progressionPlanFor({ exerciseName: "Deadlift", prescription: { targetSets: 2, targetReps: "3-5", targetRirTenth: 20, repMin: 3, repMax: 5 }, sessions: [[{ weight: 140, reps: 4, rir: 2 }, { weight: 140, reps: 4, rir: 2 }]] });
+    expect(plan.targetRir).toBe(2);
+    expect(plan.targetRpe).toBe(8);
   });
 });

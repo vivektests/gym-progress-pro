@@ -79,5 +79,12 @@ try {
       browser.kill("SIGTERM");
     });
   }
-  await rm(profile, { recursive: true, force: true });
+  try {
+    await rm(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });
+  } catch (error) {
+    // Chromium can leave a short-lived crashpad/profile file after its exit event.
+    // The assertions already completed; do not turn that OS-level cleanup race into
+    // a false-negative frontend test.
+    if (error?.code !== "ENOTEMPTY" && error?.code !== "EBUSY") throw error;
+  }
 }

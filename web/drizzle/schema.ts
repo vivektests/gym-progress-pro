@@ -55,6 +55,12 @@ export const splitDayExercises = mysqlTable("splitDayExercises", {
   orderIndex: int("orderIndex").default(0).notNull(),
   targetSets: int("targetSets").default(3).notNull(),
   targetReps: varchar("targetReps", { length: 30 }).default("8-12").notNull(),
+  targetRpeTenth: int("targetRpeTenth"),
+  targetRirTenth: int("targetRirTenth"),
+  repMin: int("repMin").default(8).notNull(),
+  repMax: int("repMax").default(12).notNull(),
+  loadIncrementTenth: int("loadIncrementTenth").default(25).notNull(),
+  progressionStrategy: mysqlEnum("progressionStrategy", ["double_progression", "rpe_autoregulation", "fixed_load"]).default("double_progression").notNull(),
   restSeconds: int("restSeconds").default(90).notNull(),
   notes: text("notes"),
 });
@@ -78,6 +84,13 @@ export const workoutExercises = mysqlTable("workoutExercises", {
   orderIndex: int("orderIndex").default(0).notNull(),
   targetSets: int("targetSets").default(3).notNull(),
   targetReps: varchar("targetReps", { length: 30 }).default("8-12").notNull(),
+  targetRpeTenth: int("targetRpeTenth"),
+  targetRirTenth: int("targetRirTenth"),
+  repMin: int("repMin").default(8).notNull(),
+  repMax: int("repMax").default(12).notNull(),
+  loadIncrementTenth: int("loadIncrementTenth").default(25).notNull(),
+  progressionStrategy: mysqlEnum("progressionStrategy", ["double_progression", "rpe_autoregulation", "fixed_load"]).default("double_progression").notNull(),
+  restSeconds: int("restSeconds").default(90).notNull(),
 });
 
 export const workoutSets = mysqlTable("workoutSets", {
@@ -89,9 +102,35 @@ export const workoutSets = mysqlTable("workoutSets", {
   weightTenth: int("weightTenth").default(0).notNull(),
   reps: int("reps").default(0).notNull(),
   rpeTenth: int("rpeTenth"),
+  rirTenth: int("rirTenth"),
   notes: text("notes"),
   completed: int("completed").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const trainingBlocks = mysqlTable("trainingBlocks", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  goal: varchar("goal", { length: 120 }).default("Progressive overload").notNull(),
+  durationWeeks: int("durationWeeks").default(4).notNull(),
+  startDate: timestamp("startDate"),
+  status: mysqlEnum("status", ["draft", "active", "completed", "archived"]).default("draft").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const trainingBlockWeeks = mysqlTable("trainingBlockWeeks", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  blockId: int("blockId").notNull(),
+  weekNumber: int("weekNumber").notNull(),
+  label: varchar("label", { length: 120 }).default("Build").notNull(),
+  intent: text("intent"),
+  deload: int("deload").default(0).notNull(),
+  volumeMultiplierTenth: int("volumeMultiplierTenth").default(10).notNull(),
+  splitId: int("splitId"),
 });
 
 export type User = typeof users.$inferSelect;
@@ -102,3 +141,5 @@ export type SplitDay = typeof splitDays.$inferSelect;
 export type Workout = typeof workouts.$inferSelect;
 export type WorkoutExercise = typeof workoutExercises.$inferSelect;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
+export type TrainingBlock = typeof trainingBlocks.$inferSelect;
+export type TrainingBlockWeek = typeof trainingBlockWeeks.$inferSelect;
