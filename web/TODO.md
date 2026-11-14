@@ -91,3 +91,10 @@
   - Support per-week editing, current-week indication, start-current-week workout flow, advance week, restart, activate, archive, and duplicate program actions.
   - Keep completed workout history linked to the originating block week; all new block queries and mutations remain scoped to the authenticated user.
   - TypeScript diagnostics pass; 23 unit tests pass; additive migration applies; production build, runtime smoke, and Chromium frontend E2E pass.
+
+- [x] **Split, repetition, and active-workout CRUD**
+  - Add protected edit/delete operations for split names/descriptions, training-day names/focus, and reusable exercise prescriptions including target reps, sets, effort, load increment, and strategy.
+  - Add protected edit/add/delete operations for in-progress workout metadata, workout exercises, target prescriptions, and logged sets/reps.
+  - Keep completed workouts and history read-only from the UI and reject active-workout mutations against completed records at the database helper boundary.
+  - Update the user manual and onboarding guide to document the controls and historical immutability rule.
+  - TypeScript diagnostics pass; 24 unit tests pass; production build, runtime smoke, and Chromium frontend E2E pass.

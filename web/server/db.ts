@@ -161,6 +161,18 @@ export async function createSplit(userId: number, input: { name: string; descrip
   return splitId;
 }
 
+export async function updateSplit(userId: number, input: { id: number; name: string; description?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(splits).set({ name: input.name, description: input.description ?? null }).where(and(eq(splits.id, input.id), eq(splits.userId, userId)));
+}
+
+export async function updateSplitDay(userId: number, input: { id: number; name: string; focus: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(splitDays).set({ name: input.name, focus: input.focus }).where(and(eq(splitDays.id, input.id), eq(splitDays.userId, userId)));
+}
+
 export async function addExerciseToSplitDay(userId: number, input: { splitDayId: number; exerciseId: number; targetSets: number; targetReps: string; targetRpe?: number; targetRir?: number; repMin?: number; repMax?: number; loadIncrement?: number; progressionStrategy?: "double_progression" | "rpe_autoregulation" | "fixed_load"; restSeconds?: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -172,6 +184,19 @@ export async function addExerciseToSplitDay(userId: number, input: { splitDayId:
   const { targetRpe, targetRir, loadIncrement, ...rest } = input;
   const result = await db.insert(splitDayExercises).values({ ...rest, userId, orderIndex: existing.length, targetRpeTenth: targetRpe == null ? null : Math.round(targetRpe * 10), targetRirTenth: targetRir == null ? null : Math.round(targetRir * 10), loadIncrementTenth: loadIncrement == null ? 25 : Math.round(loadIncrement * 10) });
   return Number(result[0].insertId);
+}
+
+export async function updateSplitDayExercise(userId: number, input: { id: number; targetSets: number; targetReps: string; targetRpe?: number; targetRir?: number; repMin: number; repMax: number; loadIncrement: number; progressionStrategy: "double_progression" | "rpe_autoregulation" | "fixed_load"; restSeconds: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const { targetRpe, targetRir, loadIncrement, ...rest } = input;
+  await db.update(splitDayExercises).set({ ...rest, targetRpeTenth: targetRpe == null ? null : Math.round(targetRpe * 10), targetRirTenth: targetRir == null ? null : Math.round(targetRir * 10), loadIncrementTenth: Math.round(loadIncrement * 10) }).where(and(eq(splitDayExercises.id, input.id), eq(splitDayExercises.userId, userId)));
+}
+
+export async function deleteSplitDayExercise(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.delete(splitDayExercises).where(and(eq(splitDayExercises.id, id), eq(splitDayExercises.userId, userId)));
 }
 
 export async function deleteSplit(userId: number, splitId: number) {
@@ -308,6 +333,41 @@ export async function addExerciseToWorkout(userId: number, input: { workoutId: n
   return Number(result[0].insertId);
 }
 
+export async function updateWorkout(userId: number, input: { id: number; name: string; notes?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(workouts).set({ name: input.name, notes: input.notes ?? null }).where(and(eq(workouts.id, input.id), eq(workouts.userId, userId), eq(workouts.status, "in_progress")));
+}
+
+export async function deleteWorkout(userId: number, workoutId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: workouts.id }).from(workouts).where(and(eq(workouts.id, workoutId), eq(workouts.userId, userId), eq(workouts.status, "in_progress"))).limit(1);
+  if (!owned[0]) throw new Error("Only an in-progress workout can be deleted");
+  const exerciseRows = await db.select({ id: workoutExercises.id }).from(workoutExercises).where(and(eq(workoutExercises.workoutId, workoutId), eq(workoutExercises.userId, userId)));
+  for (const item of exerciseRows) await db.delete(workoutSets).where(and(eq(workoutSets.workoutExerciseId, item.id), eq(workoutSets.userId, userId)));
+  await db.delete(workoutExercises).where(and(eq(workoutExercises.workoutId, workoutId), eq(workoutExercises.userId, userId)));
+  await db.delete(workouts).where(and(eq(workouts.id, workoutId), eq(workouts.userId, userId), eq(workouts.status, "in_progress")));
+}
+
+export async function updateWorkoutExercise(userId: number, input: { id: number; workoutId: number; targetSets: number; targetReps: string; targetRpe?: number; targetRir?: number; repMin: number; repMax: number; loadIncrement: number; progressionStrategy: "double_progression" | "rpe_autoregulation" | "fixed_load"; restSeconds: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: workoutExercises.id }).from(workoutExercises).innerJoin(workouts, eq(workoutExercises.workoutId, workouts.id)).where(and(eq(workoutExercises.id, input.id), eq(workoutExercises.workoutId, input.workoutId), eq(workoutExercises.userId, userId), eq(workouts.userId, userId), eq(workouts.status, "in_progress"))).limit(1);
+  if (!owned[0]) throw new Error("Workout exercise not found");
+  const { targetRpe, targetRir, loadIncrement, ...rest } = input;
+  await db.update(workoutExercises).set({ ...rest, targetRpeTenth: targetRpe == null ? null : Math.round(targetRpe * 10), targetRirTenth: targetRir == null ? null : Math.round(targetRir * 10), loadIncrementTenth: Math.round(loadIncrement * 10) }).where(and(eq(workoutExercises.id, input.id), eq(workoutExercises.userId, userId)));
+}
+
+export async function deleteWorkoutExercise(userId: number, workoutId: number, workoutExerciseId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: workoutExercises.id }).from(workoutExercises).innerJoin(workouts, eq(workoutExercises.workoutId, workouts.id)).where(and(eq(workoutExercises.id, workoutExerciseId), eq(workoutExercises.workoutId, workoutId), eq(workoutExercises.userId, userId), eq(workouts.userId, userId), eq(workouts.status, "in_progress"))).limit(1);
+  if (!owned[0]) throw new Error("Workout exercise not found");
+  await db.delete(workoutSets).where(and(eq(workoutSets.workoutExerciseId, workoutExerciseId), eq(workoutSets.userId, userId)));
+  await db.delete(workoutExercises).where(and(eq(workoutExercises.id, workoutExerciseId), eq(workoutExercises.userId, userId)));
+}
+
 export async function logSet(userId: number, input: { workoutId: number; workoutExerciseId: number; weight: number; reps: number; rpe?: number; rir?: number; notes?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
@@ -317,6 +377,22 @@ export async function logSet(userId: number, input: { workoutId: number; workout
   const setNumber = (existing[0]?.setNumber ?? 0) + 1;
   const result = await db.insert(workoutSets).values({ userId, workoutId: input.workoutId, workoutExerciseId: input.workoutExerciseId, setNumber, weightTenth: Math.round(input.weight * 10), reps: input.reps, rpeTenth: input.rpe == null ? null : Math.round(input.rpe * 10), rirTenth: input.rir == null ? null : Math.round(input.rir * 10), notes: input.notes ?? null, completed: 1 });
   return Number(result[0].insertId);
+}
+
+export async function updateSet(userId: number, input: { id: number; workoutId: number; weight: number; reps: number; rpe?: number; rir?: number; notes?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: workoutSets.id }).from(workoutSets).innerJoin(workouts, eq(workoutSets.workoutId, workouts.id)).where(and(eq(workoutSets.id, input.id), eq(workoutSets.workoutId, input.workoutId), eq(workoutSets.userId, userId), eq(workouts.userId, userId), eq(workouts.status, "in_progress"))).limit(1);
+  if (!owned[0]) throw new Error("Only sets in an in-progress workout can be edited");
+  await db.update(workoutSets).set({ weightTenth: Math.round(input.weight * 10), reps: input.reps, rpeTenth: input.rpe == null ? null : Math.round(input.rpe * 10), rirTenth: input.rir == null ? null : Math.round(input.rir * 10), notes: input.notes ?? null }).where(and(eq(workoutSets.id, input.id), eq(workoutSets.userId, userId)));
+}
+
+export async function deleteSet(userId: number, workoutId: number, setId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const owned = await db.select({ id: workoutSets.id }).from(workoutSets).innerJoin(workouts, eq(workoutSets.workoutId, workouts.id)).where(and(eq(workoutSets.id, setId), eq(workoutSets.workoutId, workoutId), eq(workoutSets.userId, userId), eq(workouts.userId, userId), eq(workouts.status, "in_progress"))).limit(1);
+  if (!owned[0]) throw new Error("Only sets in an in-progress workout can be deleted");
+  await db.delete(workoutSets).where(and(eq(workoutSets.id, setId), eq(workoutSets.userId, userId)));
 }
 
 export async function completeWorkout(userId: number, workoutId: number, notes?: string) {

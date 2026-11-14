@@ -108,4 +108,13 @@ describe("Gym Progress Pro critical flows", () => {
     expect(volumeSignal(-35, 650, 1000)).toMatchObject({ tone: "falling", label: "Volume falling" });
     expect(volumeSignal(8, 1080, 1000).tone).toBe("steady");
   });
+
+  it("declares CRUD procedures for mutable splits and active workouts", () => {
+    const routerSource = readFileSync(resolve(process.cwd(), "server/routers.ts"), "utf8");
+    expect(routerSource).toContain("updateExercise");
+    expect(routerSource).toContain("deleteExercise");
+    expect(routerSource).toContain("updateSet");
+    expect(routerSource).toContain("deleteSet");
+    expect(readFileSync(resolve(process.cwd(), "server/db.ts"), "utf8")).toContain('eq(workouts.status, "in_progress")');
+  });
 });
